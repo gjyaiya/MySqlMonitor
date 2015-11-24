@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>MySQL Monitor</title>
+    <meta charset="utf-8">
+    <link rel="shortcut icon" href="static/favicon.ico">
+    <link rel="stylesheet" href="static/bootstrap.min.css">
+    <script src="static/jquery.min.js"></script>
+    <script src="static/bootstrap.min.js"></script>
+</head>
+<body style="width:1024px;margin:10px auto;">
+
+<div class="row">
+	<div class="col-md-10 panel panel-info">
+		<div class="panel-body" style="height:600px; overflow:scroll;" id='moresult'>
+		</div>
+	</div>
+	<div class="col-md-2">
+        <form>
+            <input style="margin-bottom: 10px" type="text" class="form-control" id="host" value="127.0.0.1">
+            <input style="margin-bottom: 10px" type="text" class="form-control" id="port" value="3306">
+            <input style="margin-bottom: 10px" type="text" class="form-control" id="name" value="root">
+            <input style="margin-bottom: 10px" type="password" class="form-control" id="pass" placeholder="password">
+            <input style="margin-bottom: 10px" type="text" class="form-control" id="db" placeholder="db">
+            <input style="margin-bottom: 10px" type="text" class="form-control" id="charset" value="utf8">
+        </form>
+        <div class="list-group">
+            <a class="list-group-item" href="javascript:init_ws()">连接数据库</a>
+            <a class="list-group-item" href="javascript:sql_config()">配置数据库</a>
+            <a class="list-group-item" href="javascript:list_charts()">列出表</a>
+            <a class="list-group-item" href="javascript:set_list_charts()">选择表</a>
+            <a class="list-group-item" href="javascript:start_monitor()">开始监控</a>
+            <a class="list-group-item" href="javascript:stop()">停止监控</a>
+        </div>
+    </div>
+</div>
+
+<script>
+    var sock;
+	function init_ws(){
+		sock = new WebSocket('ws://localhost:3368/');
+		sock.onopen = function(evt){
+            append_result("WebSocket Connected!<br>")
+			console.log("WebSocket Connected!");
+		};
+		sock.onmessage = function(evt){
+			var result = eval('(' + evt.data + ')');
+			console.log(result);
+            parse_result(result);
+		};
+		sock.onclose = function(evt){
+            append_result("WebSocket Closed")
+			console.log("WebSocket Closed");
+		};
+		sock.onerror = function(evt){
+			console.log(evt);
+		}
+	}
+    function send(data){
+        sock.send(data)
+    }
+    function start_monitor(){
+        send('{"api":"start_monitor"}')
+    }
+    function list_charts(){
+        send('{"api":"list_charts"}')
+    }
+    function set_list_charts() {
+        var charts = [];
+        $(':checkbox:checked').each(function () {
+            charts.push($(this).val());
+        });
+        send('{"api":"set_charts","content":'+ JSON.stringify(charts) +'}')
+    }
+    function sql_config(){
+        var host = $("#host").val();
+        var port = parseInt($("#port").val());
+        var name = $("#name").val();
+        var pass = $("#pass").val();
+        var db = $("#db").val();
+        var charset = $("#charset").val();
+        var api = '{"api":"set_cfg","content":["'+host+'",'+port+',"'+name+'","'+pass+'","'+db+'","'+charset+'"]}';
+        send(api)
+    }
+    function stop(){
+        send('{"api":"stop_monitor"}');
+    }
+    function parse_result(result){
+        if(result["api"] == "list_charts"){
+            show_list_charts(result["content"]);
+        }
+        if(result["api"] == "on_change"){
+            append_result(format_result(result["content"]));
+        }
+        if(result["api"] == "on_api"){
+            append_result(result["content"] + '<br/>');
+        }
+        if(result["api"] == "on_stop"){
+            append_result("Monitor Stop" + '<br/>');
+        }
+    }
+    function show_list_charts(charts){
+        var s = '';
+        for(var num in charts)
+            s += '<label><input type="checkbox" value="' + charts[num] + '"/>' + charts[num] + '</label>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;';
+        $("#moresult").html(s);
+    }
+	function format_result(r){
+		var s = "<hr><p>" + r['time'] + " &nbsp&nbsp&nbsp&nbsp表：" + r['chart'] + " &nbsp&nbsp&nbsp&nbsp&nbsp操作：" + r['comment'] + "</p><table class='table'>";
+		s+="<thead><tr><th>#</th>";
+		for(var i in r['head'])
+			s+="<th>"+r['head'][i]+"</th>";
+		s+="</tr></thead><tbody>";
+		for(i in r['old']){
+			s+="<tr class='danger'><th>old</th>";
+			for(var j in r['old'][i])
+				s+="<th>"+r['old'][i][j]+"</th>";
+			s+="</tr>";
+		}
+		for(i in r['new']){
+			s+="<tr class='info'><th>new</th>";
+			for(j in r['new'][i])
+				s+="<th>"+r['new'][i][j]+"</th>";
+			s+="</tr>";
+		}
+		s+="</tbody></table>";
+		return s;
+	}
+
+	function append_result(s){
+        $("#moresult").append(s);
+        //if($("#moresult").scrollTop() == $("#moresult").scrollHeight - $("#moresult").height)
+            //$("#moresult").animate({height:$("#moresult").scrollHeight});
+        document.getElementById('moresult').scrollTop = document.getElementById('moresult').scrollHeight;
+    }
+</script>
+</body>
+</html>
